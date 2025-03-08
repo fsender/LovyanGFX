@@ -1,0 +1,11 @@
+menu "LovyanGFX"
+
+
+  config LGFX_USE_ARDUINO_WIRE_I2C
+      bool "Use Arduino Wire.h API for I2C bus"
+      default n
+      help
+          To avoid I2C conflict: Issue #686
+
+
+endmenu

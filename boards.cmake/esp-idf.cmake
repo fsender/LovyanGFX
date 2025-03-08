@@ -30,8 +30,10 @@ endif()
 
 
 ### If you use arduino-esp32 components, please activate next comment line.
-# list(APPEND COMPONENT_REQUIRES arduino-esp32)
-
+list(APPEND COMPONENT_REQUIRES arduino-esp32)
+# Uncomment below to avoid I2C conflict: Issue #686
+# set(COMPILE_DEFINITIONS "-DLGFX_USE_ARDUINO_WIRE_I2C" APPEND)
+# See Kconfig file.
 
 message(STATUS "LovyanGFX use components = ${COMPONENT_REQUIRES}")
 

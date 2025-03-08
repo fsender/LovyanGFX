@@ -23,7 +23,6 @@ Contributors:
 #include <nvs.h>
 #include <memory>
 #include <esp_log.h>
-#include <driver/i2c.h>
 #include <soc/efuse_reg.h>
 #include <soc/gpio_periph.h>
 #include <soc/gpio_reg.h>
@@ -33,6 +32,10 @@ Contributors:
 #endif
 #if __has_include(<esp_idf_version.h>)
  #include <esp_idf_version.h>
+#endif
+#if ((ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)) && defined(ARDUINO) \
+  && __has_include (<Wire.h>) && CONFIG_LGFX_USE_ARDUINO_WIRE_I2C) //[fsender 25/3/8]
+#include <Wire.h>
 #endif
 
 namespace lgfx

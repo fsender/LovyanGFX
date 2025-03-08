@@ -151,7 +151,28 @@ namespace lgfx
       _psram = enabled;
       deleteSprite();
     }
+  /// @brief Design for greyscale bmps (default 8b sprite buffer is RGB332, not greyscale)
+    void setBuffer(void* buffer, int32_t w, int32_t h, color_depth_t bpp) 
+    {
+      deleteSprite();
+      if (bpp != 0) {
+        _write_conv.setColorDepth(bpp);
+        _read_conv = _write_conv;
+        _panel_sprite.setColorDepth(bpp);
+      }
 
+      _panel_sprite.setBuffer(buffer, w, h, &_write_conv);
+      _img = _panel_sprite.getBuffer();
+
+      _sw = w;
+      _clip_r = w - 1;
+      _xpivot = w >> 1;
+
+      _sh = h;
+      _clip_b = h - 1;
+      _ypivot = h >> 1;
+    }
+    
     void setBuffer(void* buffer, int32_t w, int32_t h, uint8_t bpp = 0)
     {
       deleteSprite();

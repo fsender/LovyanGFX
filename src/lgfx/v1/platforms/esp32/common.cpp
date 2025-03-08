@@ -27,7 +27,18 @@ Contributors:
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-#include <driver/i2c.h>
+#if __has_include(<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+#endif
+#if ((ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)) && defined(ARDUINO) \
+  && __has_include (<Wire.h>) && CONFIG_LGFX_USE_ARDUINO_WIRE_I2C) //[fsender 25/3/8]
+//This is an experimental function (Use Wire.h API to access I2C)
+//#include <esp32-hal-i2c.h>
+#include <hal/i2c_types.h>
+#define LGFX_COMMON_ESP_WIRE_I2CAPI //use Arduino Wire.h api to use i2c
+#else
+#include <driver/i2c.h> //won't work in IDF 5.4.0
+#endif
 #include <driver/spi_common.h>
 #include <driver/spi_master.h>
 #include <driver/rtc_io.h>
@@ -518,6 +529,9 @@ namespace lgfx
         buscfg.intr_flags = 0;
 #if defined (ESP_IDF_VERSION_VAL)
   #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+    #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)) // [fsender 25/3/6] avoid SPI unbootable
+    buscfg.data_io_default_level = 0; //only useful ESP_IDF version over 5.4.0
+    #endif
         buscfg.isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO;
   #elif (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0))
         buscfg.isr_cpu_id = INTR_CPU_ID_AUTO;
@@ -683,6 +697,90 @@ namespace lgfx
 
   namespace i2c
   {
+#if 0// (defined( LGFX_COMMON_ESP_WIRE_I2CAPI )) // [fsender 25/3/8] These code is from `../arduino_default/common.cpp` lines from 90 to 173
+    cpp::result<void, error_t> init(int i2c_port, int pin_sda, int pin_scl) { Wire.begin(); return {};}
+    cpp::result<void, error_t> release(int i2c_port) { Wire.end(); return {};}
+    cpp::result<void, error_t> restart(int i2c_port, int i2c_addr, uint32_t freq, bool read) {  Wire.endTransmission(true); Wire.beginTransmission(i2c_addr); return {};}
+    cpp::result<void, error_t> beginTransaction(int i2c_port, int i2c_addr, uint32_t freq, bool read) { Wire.beginTransmission(i2c_addr); return {};}
+    cpp::result<void, error_t> endTransaction(int i2c_port) { Wire.endTransmission(true); return {};}
+    cpp::result<void, error_t> writeBytes(int i2c_port, const uint8_t *data, size_t length) { Wire.write(data, length); return {};}
+    cpp::result<void, error_t> readBytes(int i2c_port, uint8_t *data, size_t length)
+      {
+        Wire.readBytes((char *)data, (size_t)length);
+        /*
+        printf("0x");
+        for (int i=0; i< length; i++) {
+          printf("%02x ", data[i]);
+        }
+        printf("\n");
+        */
+        return {};
+      }
+    cpp::result<void, error_t> readBytes(int i2c_port, uint8_t *data, size_t length, bool last_nack)
+    {
+      Wire.readBytes((char *)data, (size_t)length);
+      /*
+      printf("0x");
+      for (int i=0; i< length; i++) {
+        printf("%02x ", data[i]);
+      }
+      printf("\n");
+      */
+      return {};
+    }
+
+    cpp::result<void, error_t> transactionWrite(int i2c_port, int addr, const uint8_t *writedata, uint8_t writelen, uint32_t freq)  {
+      cpp::result<void, error_t> res;
+      if ((res = beginTransaction(i2c_port, addr, freq, false)).has_value() && (res = writeBytes(i2c_port, writedata, writelen)).has_value())
+      {
+        res = endTransaction(i2c_port);
+      }
+      return res;
+     }
+
+    cpp::result<void, error_t> transactionRead(int i2c_port, int addr, uint8_t *readdata, uint8_t readlen, uint32_t freq)  {
+      cpp::result<void, error_t> res;
+      if ((res = beginTransaction(i2c_port, addr, freq, false)).has_value() && (res = readBytes(i2c_port, readdata, readlen)).has_value())
+      {
+        res = endTransaction(i2c_port);
+      }
+      return res;
+       }
+
+    cpp::result<void, error_t> transactionWriteRead(int i2c_port, int addr, const uint8_t *writedata, uint8_t writelen, uint8_t *readdata, size_t readlen, uint32_t freq)  {
+      cpp::result<void, error_t> res;
+      if ((res = beginTransaction(i2c_port, addr, freq, false)).has_value() && (res = writeBytes(i2c_port, writedata, writelen)).has_value() &&
+      (res = restart(i2c_port, addr, freq, false)).has_value() && (res = readBytes(i2c_port, readdata, readlen)).has_value())
+      {
+        res = endTransaction(i2c_port);
+      }
+      return res;
+       }
+
+    cpp::result<uint8_t, error_t> readRegister8(int i2c_port, int addr, uint8_t reg, uint32_t freq)  {
+            auto res = transactionWriteRead(i2c_port, addr, &reg, 1, &reg, 1, freq);
+      if (res.has_value())
+      {
+        return reg;
+      }
+      return cpp::fail(res.error());
+     }
+
+    cpp::result<void, error_t> writeRegister8(int i2c_port, int addr, uint8_t reg, uint8_t data, uint8_t mask, uint32_t freq)  {
+            uint8_t tmp[2] = {reg, data};
+      if (mask != 0)
+      {
+        auto res = transactionWriteRead(i2c_port, addr, &reg, 1, &tmp[1], 1, freq);
+        if (res.has_error())
+        {
+          return res;
+        }
+        tmp[1] = (tmp[1] & mask) | data;
+      }
+      return transactionWrite(i2c_port, addr, tmp, 2, freq);
+     }
+
+#else
 #if __has_include( <core_version.h> )
   #include <core_version.h>
 #endif
@@ -921,7 +1019,9 @@ namespace lgfx
       auto mod = getPeriphModule(i2c_port);
       periph_module_reset(mod);
 #endif
+#ifndef LGFX_COMMON_ESP_WIRE_I2CAPI
       i2c_set_pin((i2c_port_t)i2c_port, sda_io, scl_io, gpio_pullup_t::GPIO_PULLUP_ENABLE, gpio_pullup_t::GPIO_PULLUP_ENABLE, I2C_MODE_MASTER);
+#endif
 #else
       auto mod = getPeriphModule(i2c_port);
       periph_module_enable(mod);
@@ -1331,7 +1431,9 @@ namespace lgfx
       }
       i2c_context[i2c_port].save_reg(dev);
 
+#ifndef LGFX_COMMON_ESP_WIRE_I2CAPI
       i2c_set_pin((i2c_port_t)i2c_port, i2c_context[i2c_port].pin_sda, i2c_context[i2c_port].pin_scl, gpio_pullup_t::GPIO_PULLUP_ENABLE, gpio_pullup_t::GPIO_PULLUP_ENABLE, I2C_MODE_MASTER);
+#endif
 
 #if SOC_I2C_SUPPORT_HW_FSM_RST
       dev->ctr.fsm_rst = 1;
@@ -1542,7 +1644,7 @@ namespace lgfx
       }
       return transactionWrite(i2c_port, addr, tmp, 2, freq);
     }
-
+#endif
   }
 
 //----------------------------------------------------------------------------

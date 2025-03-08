@@ -3,7 +3,13 @@
 
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
 #include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
-#include <driver/i2c.h>
+#if __has_include(<esp_idf_version.h>)
+ #include <esp_idf_version.h>
+#endif
+#if ((ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)) && defined(ARDUINO) \
+  && __has_include (<Wire.h>) && CONFIG_LGFX_USE_ARDUINO_WIRE_I2C) //[fsender 25/3/8]
+#include <Wire.h>
+#endif
 
 // LGFX for Elecrow 5" 800x480 ESP32 RGB touch display (WZ8048C050)
 // https://www.elecrow.com/esp32-display-5-inch-hmi-display-rgb-tft-lcd-touch-screen-support-lvgl.html
